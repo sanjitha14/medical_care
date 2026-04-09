@@ -1,0 +1,262 @@
+import 'package:flutter/material.dart';
+import 'app_data.dart';
+import 'translations.dart';
+
+class PatientServicesScreen extends StatefulWidget {
+  @override
+  _PatientServicesScreenState createState() => _PatientServicesScreenState();
+}
+
+class _PatientServicesScreenState extends State<PatientServicesScreen> {
+  Map<String, String> selectedSeverity = {};
+  Color _statusColor(String? status) {
+    if (status == null) return Colors.grey;
+    if (status == 'Active') return Colors.green;
+    if (status == 'Pending') return Colors.orange;
+    return Colors.grey;
+    
+  }
+
+ void _book(String serviceName, String severity) {
+    setState(() {
+      AppData.serviceStatuses[serviceName] = 'Pending';
+      AppData.patientRequests.add({
+        'service': serviceName,
+        'time': _now(),
+        'status': 'Pending',
+      });
+      AppData.incomingRequests.add({
+        'patient': AppData.patientFullName.isEmpty ? 'Patient' : AppData.patientFullName,
+        'service': serviceName,
+        'time': _now(),
+        'priority': severity,
+        'claimed': false,
+        'claimedBy': '',
+        'status': 'Pending',
+      });
+      AppData.allRequests.add({
+        'patient': AppData.patientFullName.isEmpty ? 'Patient' : AppData.patientFullName,
+        'service': serviceName,
+        'time': _now(),
+        'status': 'Pending',
+        'claimedBy': '',
+      });
+    });
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('Request submitted for $serviceName')),
+    );
+  }
+
+  void _cancel(String serviceName) {
+    showDialog(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: Text('Cancel $serviceName?'),
+        content: Text('Are you sure you want to cancel this request?'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: Text('No')),
+          TextButton(
+            onPressed: () {
+              setState(() {
+                AppData.serviceStatuses[serviceName] = null;
+                AppData.patientRequests.removeWhere(
+                    (r) => r['service'] == serviceName && r['status'] == 'Pending');
+              });
+              Navigator.pop(context);
+            },
+            child: Text('Yes', style: TextStyle(color: Colors.red)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  String _now() {
+    final now = DateTime.now();
+    return '${now.hour}:${now.minute.toString().padLeft(2, '0')}';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    String lang = AppData.selectedLanguage;
+    final List<Map<String, String>> services = AppData.services;
+
+    return Scaffold(
+      backgroundColor: Colors.grey[100],
+      appBar: AppBar(
+        backgroundColor: Color(0xFF1A7A55),
+        foregroundColor: Colors.white,
+        automaticallyImplyLeading: false,
+        title: Text(translations[lang]!['services']!),
+      ),
+      body: services.isEmpty
+          ? _emptyState(translations[lang]!['no_services']!)
+          : Column(
+              children: [
+                Container(
+                  margin: EdgeInsets.all(12),
+                  padding: EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: Colors.yellow[50],
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: Colors.yellow[700]!),
+                  ),
+                  child: Row(
+                    children: [
+                      Text('💡', style: TextStyle(fontSize: 16)),
+                      SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          'Cancel button is disabled until you make a request for that service.',
+                          style: TextStyle(fontSize: 12, color: Colors.yellow[900]),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                Expanded(
+                  child: SingleChildScrollView(
+                    padding: EdgeInsets.symmetric(horizontal: 12),
+                    child: Table(
+                      border: TableBorder.all(
+                          color: Colors.grey[300]!,
+                          borderRadius: BorderRadius.circular(8)),
+                      columnWidths: const {
+                        0: FlexColumnWidth(3),
+                        1: FlexColumnWidth(2),
+                        2: FlexColumnWidth(2),   // NEW (Severity)
+                        3: FlexColumnWidth(1.5),
+                        4: FlexColumnWidth(1.5),
+                      },
+                      children: [
+                        TableRow(
+                          decoration: BoxDecoration(color: Colors.grey[200]),
+                          children: [
+                            _th(translations[lang]!['service']!),
+                            _th(translations[lang]!['status']!),
+                            _th("Severity"),   // 👈 ADD THIS
+                            _th(translations[lang]!['book']!),
+                            _th(translations[lang]!['cancel']!),
+                          ],
+                        ),
+                        ...services.map((Map<String, String> svc) {
+  final String svcName = svc['name'] ?? '';
+  final String? status = AppData.serviceStatuses[svcName];
+  final bool hasStatus = status != null;
+
+  return TableRow(
+    decoration: BoxDecoration(color: Colors.white),
+    children: [
+      // Service Name
+      Padding(
+        padding: EdgeInsets.all(10),
+        child: Text(svcName,
+            style: TextStyle(
+                fontWeight: FontWeight.w600,
+                fontSize: 13)),
+      ),
+
+      // Status
+      Padding(
+        padding: EdgeInsets.all(10),
+        child: Text(
+          status ?? '—',
+          style: TextStyle(
+              color: _statusColor(status),
+              fontWeight: FontWeight.w500,
+              fontSize: 13),
+        ),
+      ),
+
+      // ✅ Severity Dropdown
+      Padding(
+        padding: EdgeInsets.all(6),
+        child: DropdownButton<String>(
+          value: selectedSeverity[svcName],
+          hint: Text("Select"),
+          isExpanded: true,
+          items: ["Low", "Medium", "High"].map((level) {
+            return DropdownMenuItem(
+              value: level,
+              child: Text(level),
+            );
+          }).toList(),
+          onChanged: (value) {
+            setState(() {
+              selectedSeverity[svcName] = value!;
+            });
+          },
+        ),
+      ),
+
+      // ✅ Book Button
+      Padding(
+        padding: EdgeInsets.symmetric(vertical: 6, horizontal: 4),
+        child: ElevatedButton(
+          style: ElevatedButton.styleFrom(
+            backgroundColor: Color(0xFF1A7A55),
+            foregroundColor: Colors.white,
+          ),
+          onPressed: () {
+            if (selectedSeverity[svcName] == null) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(content: Text("Select severity first")),
+              );
+              return;
+            }
+
+            _book(svcName, selectedSeverity[svcName]!);
+          },
+          child: Text(translations[lang]!['book']!),
+        ),
+      ),
+
+      // Cancel Button
+      Padding(
+        padding: EdgeInsets.symmetric(vertical: 6, horizontal: 4),
+        child: ElevatedButton(
+          style: ElevatedButton.styleFrom(
+            backgroundColor:
+                hasStatus ? Colors.red[100] : Colors.grey[200],
+            foregroundColor:
+                hasStatus ? Colors.red : Colors.grey,
+          ),
+          onPressed:
+              hasStatus ? () => _cancel(svcName) : null,
+          child: Text(translations[lang]!['cancel']!),
+        ),
+      ),
+    ],
+  );
+}).toList(),
+
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+    );
+  }
+
+  Widget _th(String text) => Padding(
+        padding: EdgeInsets.all(10),
+        child: Text(text,
+            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+      );
+
+  Widget _emptyState(String msg) => Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.medical_services_outlined,
+                size: 56, color: Colors.grey[400]),
+            SizedBox(height: 12),
+            Text(msg, style: TextStyle(color: Colors.grey[500], fontSize: 15)),
+            SizedBox(height: 6),
+            Text('Admin will add services soon.',
+                style: TextStyle(color: Colors.grey[400], fontSize: 13)),
+          ],
+        ),
+      );
+}
